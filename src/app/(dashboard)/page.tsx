@@ -1,9 +1,47 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Sparkle, BookBookmark, Lightning } from "@phosphor-icons/react/dist/ssr";
 import Link from "next/link";
 
+type Stats = {
+  total: number;
+  thisMonth: number;
+  bestPractices: number;
+};
+
 export default function HomePage() {
+  const [stats, setStats] = useState<Stats>({
+    total: 0,
+    thisMonth: 0,
+    bestPractices: 100,
+  });
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    fetchStats();
+  }, []);
+
+  const fetchStats = async () => {
+    try {
+      setIsLoading(true);
+      const response = await fetch('/api/prompts/stats');
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch stats');
+      }
+
+      const data = await response.json();
+      setStats(data);
+    } catch (err) {
+      console.error('Error fetching stats:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -22,7 +60,9 @@ export default function HomePage() {
             <BookBookmark size={20} className="text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">0</div>
+            <div className="text-2xl font-bold">
+              {isLoading ? "..." : stats.total}
+            </div>
             <p className="text-xs text-muted-foreground">
               Tus prompts guardados
             </p>
@@ -37,7 +77,9 @@ export default function HomePage() {
             <Sparkle size={20} className="text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">0</div>
+            <div className="text-2xl font-bold">
+              {isLoading ? "..." : stats.thisMonth}
+            </div>
             <p className="text-xs text-muted-foreground">
               Nuevos prompts
             </p>
@@ -52,7 +94,7 @@ export default function HomePage() {
             <Lightning size={20} className="text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">100%</div>
+            <div className="text-2xl font-bold">{stats.bestPractices}%</div>
             <p className="text-xs text-muted-foreground">
               Basado en Claude & OpenAI
             </p>

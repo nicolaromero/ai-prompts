@@ -1,15 +1,17 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { FloppyDisk, Eye, Warning } from "@phosphor-icons/react/dist/ssr";
+import { FloppyDisk, Eye, Warning, CheckCircle } from "@phosphor-icons/react/dist/ssr";
 
 export default function NewPromptPage() {
+  const router = useRouter();
   const [formData, setFormData] = useState({
     name: "",
     role: "",
@@ -25,6 +27,9 @@ export default function NewPromptPage() {
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [showPreview, setShowPreview] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
 
   const requiredFields = ["name", "role", "context", "security", "task", "responseFormat"];
 
@@ -53,12 +58,54 @@ export default function NewPromptPage() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!validateForm()) {
       return;
     }
-    // TODO: Save to Supabase
-    console.log("Saving prompt:", formData);
+
+    setIsLoading(true);
+    setApiError(null);
+
+    try {
+      const response = await fetch('/api/prompts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: formData.name,
+          role: formData.role,
+          context: formData.context,
+          security: formData.security,
+          task: formData.task,
+          guidelines: formData.guidelines || undefined,
+          examples: formData.examples || undefined,
+          language: formData.language || undefined,
+          language_enabled: formData.languageEnabled,
+          response_format: formData.responseFormat,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to save prompt');
+      }
+
+      const savedPrompt = await response.json();
+      console.log('Prompt saved successfully:', savedPrompt);
+
+      setSuccess(true);
+
+      // Redirect to prompts list after 1.5 seconds
+      setTimeout(() => {
+        router.push('/prompts');
+      }, 1500);
+    } catch (error) {
+      console.error('Error saving prompt:', error);
+      setApiError(error instanceof Error ? error.message : 'Failed to save prompt');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const generateXML = () => {
@@ -106,6 +153,42 @@ export default function NewPromptPage() {
                 </p>
                 <p className="text-sm text-muted-foreground">
                   Por favor completa todos los campos marcados con *
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {apiError && (
+        <Card className="border-destructive">
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-3">
+              <Warning size={20} className="text-destructive mt-0.5" />
+              <div>
+                <p className="font-semibold text-destructive">
+                  Error al guardar
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {apiError}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {success && (
+        <Card className="border-green-500">
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-3">
+              <CheckCircle size={20} className="text-green-600 mt-0.5" weight="fill" />
+              <div>
+                <p className="font-semibold text-green-600">
+                  Prompt guardado exitosamente
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Redirigiendo a tus prompts...
                 </p>
               </div>
             </div>
@@ -333,14 +416,15 @@ export default function NewPromptPage() {
       )}
 
       <div className="flex gap-4 pb-8">
-        <Button onClick={handleSave} size="lg">
+        <Button onClick={handleSave} size="lg" disabled={isLoading || success}>
           <FloppyDisk size={20} className="mr-2" />
-          Guardar Prompt
+          {isLoading ? "Guardando..." : success ? "Guardado!" : "Guardar Prompt"}
         </Button>
         <Button
           variant="outline"
           onClick={() => setShowPreview(!showPreview)}
           size="lg"
+          disabled={isLoading || success}
         >
           <Eye size={20} className="mr-2" />
           {showPreview ? "Ocultar" : "Ver"} Vista Previa

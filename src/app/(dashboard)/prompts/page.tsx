@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,29 +10,114 @@ import {
   PencilSimple,
   Copy,
   MagnifyingGlass,
-  FileText
+  FileText,
+  Warning,
+  CheckCircle
 } from "@phosphor-icons/react/dist/ssr";
 import Link from "next/link";
+import { generateXML } from "@/lib/xml-generator";
 
-// Mock data for demonstration
-const mockPrompts = [
-  {
-    id: "1",
-    name: "Asistente de Código Python",
-    role: "Experto desarrollador Python",
-    created_at: "2025-11-10T10:00:00Z",
-  },
-  {
-    id: "2",
-    name: "Revisor de Documentación",
-    role: "Technical writer especializado",
-    created_at: "2025-11-09T15:30:00Z",
-  },
-];
+type Prompt = {
+  id: string;
+  name: string;
+  role: string;
+  context: string;
+  security: string;
+  task: string;
+  guidelines?: string;
+  examples?: string;
+  language?: string;
+  language_enabled: boolean;
+  response_format: string;
+  created_at: string;
+};
 
 export default function PromptsPage() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [prompts] = useState(mockPrompts);
+  const [prompts, setPrompts] = useState<Prompt[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [copySuccess, setCopySuccess] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchPrompts();
+  }, []);
+
+  const fetchPrompts = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      const response = await fetch('/api/prompts');
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch prompts');
+      }
+
+      const data = await response.json();
+      setPrompts(data);
+    } catch (err) {
+      console.error('Error fetching prompts:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load prompts');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('¿Estás seguro de que quieres eliminar este prompt?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/prompts/${id}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete prompt');
+      }
+
+      // Remove from local state
+      setPrompts((prev) => prev.filter((p) => p.id !== id));
+    } catch (err) {
+      console.error('Error deleting prompt:', err);
+      alert('Error al eliminar el prompt');
+    }
+  };
+
+  const handleCopyXML = async (id: string) => {
+    try {
+      const response = await fetch(`/api/prompts/${id}`);
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch prompt');
+      }
+
+      const prompt = await response.json();
+      const xml = generateXML({
+        role: prompt.role,
+        context: prompt.context,
+        security: prompt.security,
+        task: prompt.task,
+        guidelines: prompt.guidelines,
+        examples: prompt.examples,
+        language: prompt.language,
+        languageEnabled: prompt.language_enabled,
+        responseFormat: prompt.response_format,
+      });
+
+      await navigator.clipboard.writeText(xml);
+      setCopySuccess(id);
+
+      setTimeout(() => {
+        setCopySuccess(null);
+      }, 2000);
+    } catch (err) {
+      console.error('Error copying XML:', err);
+      alert('Error al copiar el XML');
+    }
+  };
 
   const filteredPrompts = prompts.filter((prompt) =>
     prompt.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -64,6 +149,37 @@ export default function PromptsPage() {
         </Button>
       </div>
 
+      {copySuccess && (
+        <Card className="border-green-500">
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-3">
+              <CheckCircle size={20} className="text-green-600 mt-0.5" weight="fill" />
+              <div>
+                <p className="font-semibold text-green-600">
+                  XML copiado al portapapeles
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {error && (
+        <Card className="border-destructive">
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-3">
+              <Warning size={20} className="text-destructive mt-0.5" />
+              <div>
+                <p className="font-semibold text-destructive">
+                  Error al cargar prompts
+                </p>
+                <p className="text-sm text-muted-foreground">{error}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardContent className="pt-6">
           <div className="relative">
@@ -76,12 +192,19 @@ export default function PromptsPage() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-10"
+              disabled={isLoading}
             />
           </div>
         </CardContent>
       </Card>
 
-      {filteredPrompts.length === 0 ? (
+      {isLoading ? (
+        <Card>
+          <CardContent className="pt-12 pb-12 text-center">
+            <p className="text-muted-foreground">Cargando prompts...</p>
+          </CardContent>
+        </Card>
+      ) : filteredPrompts.length === 0 ? (
         <Card>
           <CardContent className="pt-12 pb-12 text-center">
             <FileText size={48} className="mx-auto mb-4 text-muted-foreground" />
@@ -131,20 +254,20 @@ export default function PromptsPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => {
-                    // TODO: Copy XML to clipboard
-                    console.log("Copy prompt:", prompt.id);
-                  }}
+                  onClick={() => handleCopyXML(prompt.id)}
+                  title="Copiar XML"
                 >
-                  <Copy size={16} />
+                  {copySuccess === prompt.id ? (
+                    <CheckCircle size={16} weight="fill" className="text-green-600" />
+                  ) : (
+                    <Copy size={16} />
+                  )}
                 </Button>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => {
-                    // TODO: Delete prompt
-                    console.log("Delete prompt:", prompt.id);
-                  }}
+                  onClick={() => handleDelete(prompt.id)}
+                  title="Eliminar"
                 >
                   <Trash size={16} />
                 </Button>
