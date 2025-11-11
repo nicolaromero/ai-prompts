@@ -1,14 +1,15 @@
 import { NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabase-server';
-import { getCurrentUserId } from '@/lib/auth-helpers';
+import { getCurrentUserId, getActiveOrganizationId } from '@/lib/auth-helpers';
 
 /**
  * GET /api/prompts/stats
- * Get statistics about user's prompts
+ * Get statistics about organization's prompts
  */
 export async function GET() {
   try {
     const userId = await getCurrentUserId();
+    const organizationId = await getActiveOrganizationId();
 
     if (!userId) {
       return NextResponse.json(
@@ -17,11 +18,18 @@ export async function GET() {
       );
     }
 
+    if (!organizationId) {
+      return NextResponse.json(
+        { error: 'No active organization' },
+        { status: 400 }
+      );
+    }
+
     // Get total count
     const { count: totalCount, error: totalError } = await supabaseServer
       .from('prompts')
       .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId);
+      .eq('organization_id', organizationId);
 
     if (totalError) {
       console.error('Error counting total prompts:', totalError);
@@ -38,7 +46,7 @@ export async function GET() {
     const { count: monthCount, error: monthError } = await supabaseServer
       .from('prompts')
       .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId)
+      .eq('organization_id', organizationId)
       .gte('created_at', firstDayOfMonth.toISOString());
 
     if (monthError) {

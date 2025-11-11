@@ -1,17 +1,26 @@
-import { cookies } from 'next/headers';
+import { headers } from 'next/headers';
+import { auth } from './auth';
 
 /**
  * Get the current user ID from the session
- * This is a placeholder - you'll need to implement this based on Better.auth
  */
 export async function getCurrentUserId(): Promise<string | null> {
-  // TODO: Implement Better.auth session check
-  // For now, return a mock user ID for development
-  const cookieStore = await cookies();
-  const userId = cookieStore.get('user_id')?.value;
+  const session = await auth.api.getSession({
+    headers: await headers()
+  });
 
-  // In development, you can use a test user ID
-  return userId || 'test-user-id';
+  return session?.user?.id || null;
+}
+
+/**
+ * Get the active organization ID from the session
+ */
+export async function getActiveOrganizationId(): Promise<string | null> {
+  const session = await auth.api.getSession({
+    headers: await headers()
+  });
+
+  return session?.session?.activeOrganizationId || null;
 }
 
 /**
@@ -26,7 +35,9 @@ export async function isAuthenticated(): Promise<boolean> {
  * Get user session
  */
 export async function getSession() {
-  // TODO: Implement Better.auth session retrieval
-  const userId = await getCurrentUserId();
-  return userId ? { userId } : null;
+  const session = await auth.api.getSession({
+    headers: await headers()
+  });
+
+  return session;
 }

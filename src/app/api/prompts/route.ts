@@ -1,14 +1,15 @@
 import { NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabase-server';
-import { getCurrentUserId } from '@/lib/auth-helpers';
+import { getCurrentUserId, getActiveOrganizationId } from '@/lib/auth-helpers';
 
 /**
  * GET /api/prompts
- * Get all prompts for the current user
+ * Get all prompts for the current organization
  */
 export async function GET() {
   try {
     const userId = await getCurrentUserId();
+    const organizationId = await getActiveOrganizationId();
 
     if (!userId) {
       return NextResponse.json(
@@ -17,10 +18,17 @@ export async function GET() {
       );
     }
 
+    if (!organizationId) {
+      return NextResponse.json(
+        { error: 'No active organization' },
+        { status: 400 }
+      );
+    }
+
     const { data: prompts, error } = await supabaseServer
       .from('prompts')
       .select('*')
-      .eq('user_id', userId)
+      .eq('organization_id', organizationId)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -48,11 +56,19 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const userId = await getCurrentUserId();
+    const organizationId = await getActiveOrganizationId();
 
     if (!userId) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
+      );
+    }
+
+    if (!organizationId) {
+      return NextResponse.json(
+        { error: 'No active organization' },
+        { status: 400 }
       );
     }
 
@@ -71,7 +87,8 @@ export async function POST(request: Request) {
 
     // Prepare data for insertion
     const promptData = {
-      user_id: userId,
+      organization_id: organizationId,
+      created_by: userId,
       name: body.name,
       role: body.role,
       context: body.context,

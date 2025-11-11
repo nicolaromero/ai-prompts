@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabase-server';
-import { getCurrentUserId } from '@/lib/auth-helpers';
+import { getCurrentUserId, getActiveOrganizationId } from '@/lib/auth-helpers';
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -13,11 +13,19 @@ type RouteContext = {
 export async function GET(request: Request, context: RouteContext) {
   try {
     const userId = await getCurrentUserId();
+    const organizationId = await getActiveOrganizationId();
 
     if (!userId) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
+      );
+    }
+
+    if (!organizationId) {
+      return NextResponse.json(
+        { error: 'No active organization' },
+        { status: 400 }
       );
     }
 
@@ -27,7 +35,7 @@ export async function GET(request: Request, context: RouteContext) {
       .from('prompts')
       .select('*')
       .eq('id', id)
-      .eq('user_id', userId)
+      .eq('organization_id', organizationId)
       .single();
 
     if (error) {
@@ -55,12 +63,21 @@ export async function GET(request: Request, context: RouteContext) {
 }
 
 /**
+ * PUT /api/prompts/[id]
+ * Update a prompt (full update)
+ */
+export async function PUT(request: Request, context: RouteContext) {
+  return PATCH(request, context);
+}
+
+/**
  * PATCH /api/prompts/[id]
- * Update a prompt
+ * Update a prompt (partial update)
  */
 export async function PATCH(request: Request, context: RouteContext) {
   try {
     const userId = await getCurrentUserId();
+    const organizationId = await getActiveOrganizationId();
 
     if (!userId) {
       return NextResponse.json(
@@ -69,17 +86,24 @@ export async function PATCH(request: Request, context: RouteContext) {
       );
     }
 
+    if (!organizationId) {
+      return NextResponse.json(
+        { error: 'No active organization' },
+        { status: 400 }
+      );
+    }
+
     const { id } = await context.params;
     const body = await request.json();
 
     // Remove fields that shouldn't be updated
-    const { id: _, user_id: __, created_at: ___, ...updates } = body;
+    const { id: _, organization_id: __, created_by: ___, created_at: ____, ...updates } = body;
 
     const { data: prompt, error } = await supabaseServer
       .from('prompts')
       .update(updates)
       .eq('id', id)
-      .eq('user_id', userId)
+      .eq('organization_id', organizationId)
       .select()
       .single();
 
@@ -114,11 +138,19 @@ export async function PATCH(request: Request, context: RouteContext) {
 export async function DELETE(request: Request, context: RouteContext) {
   try {
     const userId = await getCurrentUserId();
+    const organizationId = await getActiveOrganizationId();
 
     if (!userId) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
+      );
+    }
+
+    if (!organizationId) {
+      return NextResponse.json(
+        { error: 'No active organization' },
+        { status: 400 }
       );
     }
 
@@ -128,7 +160,7 @@ export async function DELETE(request: Request, context: RouteContext) {
       .from('prompts')
       .delete()
       .eq('id', id)
-      .eq('user_id', userId);
+      .eq('organization_id', organizationId);
 
     if (error) {
       console.error('Error deleting prompt:', error);
